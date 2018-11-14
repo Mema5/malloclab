@@ -17,6 +17,7 @@
 
 #include "mm.h"
 #include "memlib.h"
+#include "config.h"
 
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
@@ -44,35 +45,84 @@ team_t team = {
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
+static int* heapMaxAddress;       // pointer to last legal address in the heap
+static int* heapStart;            // pointer to first address in the heap
+
+
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
+    heapMaxAddress = mem_heap_lo() + MAX_HEAP;
+    heapStart = mem_heap_lo();
+    // initialisation du premier mot pour indiquer toute la place dispo
+    *heapStart = (MAX_HEAP / SIZE_T_SIZE) | 1;
     return 0;
 }
 
 /* 
+ * Naive implementation :
  * mm_malloc - Allocate a block by incrementing the brk pointer.
+ *     Always allocate a block whose size is a multiple of the alignment.
+ */
+// void *mm_malloc(size_t size)
+// {
+//     int newsize = ALIGN(size + SIZE_T_SIZE);
+//     void *p = mem_sbrk(newsize);
+//     if (p == (void *)-1)
+// 	return NULL;
+//     else {
+//         *(size_t *)p = size;
+//         return (void *)((char *)p + SIZE_T_SIZE);
+//     }
+// }
+
+
+/*
+ * Find the next free block of size size
+ * (first fit implementation)
+ */
+int *findFreeBlock(int size) {
+    int *p = heapStart;
+
+    while((p<heapMaxAddress) 
+            && ((*p & 1) || 
+                (*p <= size)))
+        p = p + (*p & -2); 
+
+    if ( (size < 0) || ((p + size) > heapMaxAddress)) {
+        // out of memory
+        fprintf(stderr, "ERROR: findFreeBlock failed. Ran out of memory...\n");
+        return (int *)-1;
+    }
+    return p;
+}
+
+/* 
+ * mm_malloc - Implicit free list implementation
  *     Always allocate a block whose size is a multiple of the alignment.
  */
 void *mm_malloc(size_t size)
 {
     int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
-	return NULL;
-    else {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
-    }
+    int* start = findFreeBlock(newsize);
+
+    // write the size of the block in the first word + bit free = 1
+    *start = newsize | 1;
+
+    return (void *) start;
 }
 
+
 /*
- * mm_free - Freeing a block does nothing.
+ * mm_free - Updating the free bit and coalescing
  */
 void mm_free(void *ptr)
 {
+    int * p = ptr;
+    *p = *p & -2;
+
 }
 
 /*
